@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: solr
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:Gerolsteiner99/minikube-solr-config.git
+    path: kustomize/base/solr
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: solr
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

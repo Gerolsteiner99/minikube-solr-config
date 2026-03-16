@@ -1,0 +1,6 @@
+resources:
+  - ../../base/zookeeper
+  - ../../base/solr
+
+patches:
+  - patch-resources.yaml

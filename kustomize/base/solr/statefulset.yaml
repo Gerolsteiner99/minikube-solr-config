@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+spec:
+  serviceName: solr
+  replicas: 3
+  selector:
+    matchLabels:
+      app: solr
+  template:
+    metadata:
+      labels:
+        app: solr
+    spec:
+      containers:
+      - name: solr
+        image: solr:8.11
+        ports:
+        - containerPort: 8983
+        env:
+        - name: ZK_HOST
+          value: zookeeper:2181
+        volumeMounts:
+        - name: solrdata
+          mountPath: /var/solr
+  volumeClaimTemplates:
+  - metadata:
+      name: solrdata
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi

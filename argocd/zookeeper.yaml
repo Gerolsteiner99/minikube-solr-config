@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: zookeeper
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:Gerolsteiner99/minikube-solr-config.git
+    path: kustomize/base/zookeeper
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: zookeeper
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
