@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-zookeeper
+        command:
+        - sh
+        - -c
+        - |
+          until nslookup zookeeper-headless.zookeeper.svc.cluster.local; do
+            echo "Waiting for ZooKeeper DNS..."
+            sleep 2
+          done
+          echo "ZooKeeper DNS resolved"
+
