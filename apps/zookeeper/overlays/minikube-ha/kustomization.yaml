@@ -4,25 +4,5 @@ kind: Kustomization
 resources:
   - ../../base
 
-patches:
-  # Deine bestehenden JSON6902-Patches
-  - target:
-      kind: StatefulSet
-      name: zookeeper
-    patch: |
-      - op: replace
-        path: /spec/replicas
-        value: 3
-      - op: replace
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            cpu: "200m"
-            memory: "1Gi"
-          limits:
-            cpu: "1"
-            memory: "2Gi"
-
-  # Neuer Patch für ConfigMap-Mount
-  - path: patch-config.yaml
-
+patchesStrategicMerge:
+  - patch-zookeeper.yaml
