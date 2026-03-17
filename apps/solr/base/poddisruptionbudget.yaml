@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: solr
+  labels:
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: solr
+      app.kubernetes.io/instance: solr
+
