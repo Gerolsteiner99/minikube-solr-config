@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: zookeeper
+  labels:
+    app: zookeeper
 spec:
   serviceName: zookeeper
   replicas: 3
@@ -13,17 +15,43 @@ spec:
       labels:
         app: zookeeper
     spec:
-      containers:
-      - name: zookeeper
-        image: zookeeper:3.7
-        ports:
-        - containerPort: 2181
-        env:
-        - name: ZOO_SERVERS
-          value: server.1=zookeeper-0.zookeeper:2888:3888 server.2=zookeeper-1.zookeeper:2888:3888 server.3=zookeeper-2.zookeeper:2888:3888
+      initContainers:
+      - name: init-myid
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          ID=$(hostname | awk -F'-' '{print $NF}')
+          echo $((ID + 1)) > /data/myid
         volumeMounts:
         - name: datadir
           mountPath: /data
+
+      containers:
+      - name: zookeeper
+        image: zookeeper:3.9.2
+        ports:
+        - name: client
+          containerPort: 2181
+        - name: follower
+          containerPort: 2888
+        - name: election
+          containerPort: 3888
+        env:
+        - name: ZOO_SERVERS
+          value: |
+            server.1=zookeeper-0.zookeeper:2888:3888
+            server.2=zookeeper-1.zookeeper:2888:3888
+            server.3=zookeeper-2.zookeeper:2888:3888
+        - name: ZOO_CLIENT_PORT
+          value: "2181"
+        - name: ZOO_DATA_DIR
+          value: /data
+        volumeMounts:
+        - name: datadir
+          mountPath: /data
+
   volumeClaimTemplates:
   - metadata:
       name: datadir
@@ -32,3 +60,4 @@ spec:
       resources:
         requests:
           storage: 5Gi
+
