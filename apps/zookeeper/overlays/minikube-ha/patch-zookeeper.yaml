@@ -22,4 +22,3 @@ spec:
         - name: config
           configMap:
             name: zookeeper-config
-
