@@ -1,0 +1,249 @@
+---
+# Source: zookeeper/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zookeeper
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: zookeeper
+---
+# Source: zookeeper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zookeeper
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: zookeeper/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-config
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  zoo.cfg: |
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    dataDir=/data
+    dataLogDir=/datalog
+    maxClientCnxns=60
+    standaloneEnabled=false
+    admin.enableServer=false
+    clientPort=2181
+    quorumListenOnAllIPs=true
+    4lw.commands.whitelist=*
+    server.1=zookeeper-0.zookeeper-headless:2888:3888
+    server.2=zookeeper-1.zookeeper-headless:2888:3888
+    server.3=zookeeper-2.zookeeper-headless:2888:3888
+---
+# Source: zookeeper/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - port: 2181
+    name: client
+    protocol: TCP
+  - port: 2888
+    name: server
+    protocol: TCP
+  - port: 3888
+    name: leader-election
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+---
+# Source: zookeeper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 2181
+    targetPort: client
+    protocol: TCP
+    name: client
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+---
+# Source: zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  labels:
+    helm.sh/chart: zookeeper-1.0.0
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/version: "3.9.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: zookeeper-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: zookeeper
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: zookeeper-1.0.0
+        app.kubernetes.io/name: zookeeper
+        app.kubernetes.io/instance: zookeeper
+        app.kubernetes.io/version: "3.9.4"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - zookeeper
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+      - name: init-myid
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          POD_ORDINAL=$(echo $HOSTNAME | sed 's/.*-//')
+          MY_ID=$((POD_ORDINAL + 1))
+          echo $MY_ID > /data/myid
+          echo "Generated myid: $MY_ID for pod $HOSTNAME"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      containers:
+      - name: zookeeper
+        image: "docker.io/library/zookeeper:3.9.4"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        env:
+        - name: ZOO_MY_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ZOO_SERVERS
+          value: "server.1=zookeeper-0.zookeeper-headless:2888:3888 server.2=zookeeper-1.zookeeper-headless:2888:3888 server.3=zookeeper-2.zookeeper-headless:2888:3888"
+        - name: ZOO_TICK_TIME
+          value: "2000"
+        - name: ZOO_INIT_LIMIT
+          value: "10"
+        - name: ZOO_SYNC_LIMIT
+          value: "5"
+        - name: ZOO_MAX_CLIENT_CNXNS
+          value: "60"
+        - name: ZOO_STANDALONE_ENABLED
+          value: "false"
+        - name: ZOO_ADMINSERVER_ENABLED
+          value: "false"
+        - name: ZOO_4LW_COMMANDS_WHITELIST
+          value: "*"
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "echo ruok | nc localhost 2181 | grep imok"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "echo ruok | nc localhost 2181 | grep imok"
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                echo "Gracefully stopping ZooKeeper..."
+                sleep 30
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 1Gi

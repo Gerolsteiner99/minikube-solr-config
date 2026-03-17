@@ -1,0 +1,281 @@
+---
+# Source: solr/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: solr
+  labels:
+    helm.sh/chart: solr-1.0.0
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+    app.kubernetes.io/version: "9.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: solr
+      app.kubernetes.io/instance: solr
+---
+# Source: solr/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solr-config
+data:
+  solr.in.sh: |
+    # Solr Configuration
+    SOLR_HEAP=""
+    ZK_HOST=""
+    SOLR_HOST="$(hostname -f)"
+    SOLR_PORT="8983"
+    
+    # Kafka Integration
+    KAFKA_BOOTSTRAP_SERVERS=""
+    
+    # Enable Prometheus metrics
+    ENABLE_PROMETHEUS_METRICS="true"
+    
+    # Additional JVM options
+    GC_TUNE="-XX:+UseG1GC -XX:+PerfDisableSharedMem -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=250"
+    
+  solr.xml: |
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <solr>
+      <solrcloud>
+        <str name="host">${host:}</str>
+        <int name="hostPort">${jetty.port:8983}</int>
+        <str name="hostContext">${hostContext:solr}</str>
+        <int name="zkClientTimeout">${zkClientTimeout:30000}</int>
+        <bool name="genericCoreNodeNames">${genericCoreNodeNames:true}</bool>
+      </solrcloud>
+      <shardHandlerFactory name="shardHandlerFactory"
+        class="HttpShardHandlerFactory">
+        <int name="socketTimeout">${socketTimeout:0}</int>
+        <int name="connTimeout">${connTimeout:0}</int>
+      </shardHandlerFactory>
+    </solr>
+---
+# Source: solr/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr-headless
+  labels:
+    helm.sh/chart: solr-1.0.0
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+    app.kubernetes.io/version: "9.4.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - port: 8983
+    name: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+---
+# Source: solr/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr
+  labels:
+    helm.sh/chart: solr-1.0.0
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+    app.kubernetes.io/version: "9.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8983
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+---
+# Source: solr/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+  labels:
+    helm.sh/chart: solr-1.0.0
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/instance: solr
+    app.kubernetes.io/version: "9.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: solr-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: solr
+      app.kubernetes.io/instance: solr
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: solr-1.0.0
+        app.kubernetes.io/name: solr
+        app.kubernetes.io/instance: solr
+        app.kubernetes.io/version: "9.4.1"
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8983"
+    spec:
+      serviceAccountName: solr
+      securityContext:
+        null
+      terminationGracePeriodSeconds: 120
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - solr
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+      - name: init-chmod
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 8983:8983 /var/solr
+          chmod 755 /var/solr
+          echo "Permissions fixed for Solr data directory"
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: solr-data
+          mountPath: /var/solr
+      - name: wait-for-zookeeper
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          until nslookup zookeeper-headless; do
+            echo "Waiting for ZooKeeper DNS..."
+            sleep 2
+          done
+          echo "ZooKeeper DNS resolved"
+      containers:
+      - name: solr
+        image: "docker.io/library/solr:9.4.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8983
+          name: http
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SOLR_HOST
+          value: $(POD_NAME).solr-headless.default.svc.cluster.local
+        - name: SOLR_PORT
+          value: "8983"
+        - name: ZK_HOST
+          value: zookeeper-headless:2181/solr
+        - name: SOLR_JAVA_MEM
+          value: "-Xms1g -Xmx2g"
+        - name: GC_TUNE
+          value: "-XX:+UseG1GC -XX:+PerfDisableSharedMem -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=250 -XX:+UseLargePages -XX:+AlwaysPreTouch"
+        - name: SOLR_OPTS
+          value: "-Djetty.host=0.0.0.0 -Djetty.port=8983 -DzkClientTimeout=30000 -Dlog4j2.formatMsgNoLookups=true"
+        - name: SOLR_HEAP
+          value: "2g"
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 2Gi
+        command:
+        - docker-entrypoint.sh
+        args:
+        - solr
+        - start
+        - -f
+        - -c
+        - -z
+        - "$(ZK_HOST)"
+        - "-h"
+        - "$(SOLR_HOST)"
+        - "-p"
+        - "8983"
+        volumeMounts:
+        - name: solr-data
+          mountPath: /var/solr
+        livenessProbe:
+          httpGet:
+            path: /solr/admin/info/system
+            port: 8983
+            scheme: HTTP
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /solr/admin/info/system
+            port: 8983
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /solr
+            port: 8983
+            scheme: HTTP
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                echo "Gracefully stopping Solr..."
+                # Try to unload cores gracefully
+                curl -X POST "http://localhost:8983/solr/admin/cores?action=UNLOAD&deleteIndex=true&deleteDataDir=true&deleteInstanceDir=true" || true
+                sleep 30
+  volumeClaimTemplates:
+  - metadata:
+      name: solr-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 10Gi
