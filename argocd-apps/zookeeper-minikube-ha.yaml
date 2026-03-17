@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: zookeeper-minikube-ha
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Gerolsteiner99/minikube-solr-config.git
+    path: apps/zookeeper/overlays/minikube-ha
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: zookeeper
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
