@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  template:
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: zookeeper-config
+      containers:
+        - name: zookeeper
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+
