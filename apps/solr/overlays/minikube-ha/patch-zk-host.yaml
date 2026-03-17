@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+spec:
+  template:
+    spec:
+      containers:
+      - name: solr
+        env:
+        - name: ZK_HOST
+          value: zookeeper-headless.zookeeper.svc.cluster.local:2181/solr
+
