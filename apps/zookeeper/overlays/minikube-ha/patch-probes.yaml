@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  template:
+    spec:
+      containers:
+        - name: zookeeper
+          # Startup-Probe: gibt dem Server viel Zeit, sauber hochzukommen,
+          # bevor Liveness/Readiness greifen.
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - echo ruok | nc localhost 2181 | grep imok
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+          # Liveness-Probe: deutlich großzügiger für Minikube
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - echo ruok | nc localhost 2181 | grep imok
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+            successThreshold: 1
+
+          # Readiness-Probe: etwas früher, aber ebenfalls entspannt
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - echo ruok | nc localhost 2181 | grep imok
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+            successThreshold: 1
+

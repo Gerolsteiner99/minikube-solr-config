@@ -4,6 +4,17 @@ kind: Kustomization
 resources:
   - ../../base
 
-patchesStrategicMerge:
-  - patch-zookeeper.yaml
+# Alle Zookeeper-Anpassungen für Minikube-HA
+patches:
+  # Bestehender Patch für Ressourcen / Config-Mount (bereits im Repo)
+  - path: patch-zookeeper.yaml
+    target:
+      kind: StatefulSet
+      name: zookeeper
+
+  # Neuer Patch für Probes (Minikube-freundlich)
+  - path: patch-probes.yaml
+    target:
+      kind: StatefulSet
+      name: zookeeper
 
