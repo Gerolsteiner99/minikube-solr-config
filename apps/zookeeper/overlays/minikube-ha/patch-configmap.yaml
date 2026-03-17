@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-config
+data:
+  zoo.cfg: |
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    dataDir=/var/lib/zookeeper/data
+    dataLogDir=/var/lib/zookeeper/log
+    clientPort=2181
+    standaloneEnabled=true
+    reconfigEnabled=false
+

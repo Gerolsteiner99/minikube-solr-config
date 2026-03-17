@@ -18,3 +18,8 @@ patches:
       kind: StatefulSet
       name: zookeeper
 
+patchesStrategicMerge:
+  - patch-resources.yaml
+  - patch-replicas.yaml
+  - patch-configmap.yaml
+
